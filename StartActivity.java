@@ -56,8 +56,8 @@ public class StartActivity extends AppCompatActivity {
     float starting_value = 0;
     boolean flag = false;
     float differenza_limite = 10F;
-
-
+    boolean shouldAddPothole = false;
+    private boolean canStartLocation = false;
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -130,7 +130,7 @@ public class StartActivity extends AppCompatActivity {
                                                     }
                                                 });
                                                 // Inizia ad osservare le coordinate
-                                                startLocation();
+                                                //startLocation();
                                             }
                                         });
                                     }
@@ -200,30 +200,42 @@ public class StartActivity extends AppCompatActivity {
             //Rendo positivo il valore trovato e così facendo posso sfruttarlo all'interno dell'algoritmo Z-Diff.
             float mod_delta_x = Math.abs(deltacc_x);
             float mod_delta_y = Math.abs(deltacc_y);
+            Log.d("deltax", String.valueOf(deltacc_x));
+            Log.d("deltay", String.valueOf(deltacc_y));
             int orientation = getResources().getConfiguration().orientation;
             switch (orientation) {
                 //In landscape
                 case (2):
                     ///*****ALGORITMO Z-TRASH*****///
                     if (x_acc_lin_curr > 8 || x_acc_lin_curr < -8) {
-                        addPothole();
+                        Log.d("variable", String.valueOf(shouldAddPothole));
+                        shouldAddPothole = true;
+
                     }
                     ///*****ALGORITMO Z-DIFF*****///
                     if (mod_delta_x > differenza_limite) {
-                        addPothole();
+                        Log.d("variable", "z-diff" + shouldAddPothole);
+                        shouldAddPothole = true;
                     }
+                    break;
 
                     //In portrait
                 case (1):
                     ///*****ALGORITMO Z-TRASH*****///
                     if (y_acc_lin_curr > 8 || y_acc_lin_curr < -8) {
-                        addPothole();
+                        Log.d("variable", "z-diff" + shouldAddPothole);
+                        shouldAddPothole = true;
                     }
 
                     ///*****ALGORITMO Z-DIFF*****///
                     if (mod_delta_y > differenza_limite) {
-                        addPothole();
+                        Log.d("variable", "z-diff" + shouldAddPothole);
+                        shouldAddPothole = true;
                     }
+                    break;
+            }
+            if (shouldAddPothole) {
+                addPothole();
             }
         }
     }
@@ -240,10 +252,11 @@ public class StartActivity extends AppCompatActivity {
     }
 
     private void addPothole() {
-        if (currentLocation != null) {
+        if (shouldAddPothole && currentLocation != null) {
             Pothole newPothole = new Pothole((int) currentSessionId, currentLocation.getLatitude(), currentLocation.getLongitude(), "Indirizzo");
             // Assumendo che tu abbia un ViewModel o un altro metodo per inserire nel DB
             potholeViewModel.insert(newPothole);
+            shouldAddPothole = false;
         }
     }
     @Override
@@ -292,7 +305,7 @@ public class StartActivity extends AppCompatActivity {
 
             if (allPermissionsGranted) {
                 // Tutti i permessi sono stati concessi
-                startLocation();
+               // startLocation();
             } else {
                 // Almeno un permesso è stato negato
                 Toast.makeText(this, "Permessi negati. Alcune funzionalità potrebbero non essere disponibili.", Toast.LENGTH_LONG).show();
