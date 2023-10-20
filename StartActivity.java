@@ -1,57 +1,3 @@
-package com.example.roomcoord;
-
-import static com.example.roomcoord.AppDatabase.databaseWriteExecutor;
-
-import android.Manifest;
-import android.app.AlertDialog;
-import android.content.Context;
-import android.content.DialogInterface;
-import android.content.Intent;
-import android.content.pm.PackageManager;
-import android.hardware.Sensor;
-import android.hardware.SensorEvent;
-import android.hardware.SensorEventListener;
-import android.hardware.SensorManager;
-import android.location.Address;
-import android.location.Geocoder;
-import android.location.Location;
-import android.net.Uri;
-import android.os.Bundle;
-import android.os.Looper;
-import android.provider.Settings;
-import android.util.Log;
-import android.view.View;
-import android.widget.Button;
-import android.widget.CompoundButton;
-import android.widget.EditText;
-import android.widget.ImageButton;
-import android.widget.Switch;
-import android.widget.TextView;
-import android.widget.Toast;
-
-import androidx.annotation.NonNull;
-import androidx.appcompat.app.AppCompatActivity;
-import androidx.appcompat.widget.SwitchCompat;
-import androidx.appcompat.widget.TooltipCompat;
-import androidx.core.app.ActivityCompat;
-import androidx.core.content.ContextCompat;
-import androidx.lifecycle.ViewModelProvider;
-
-import com.google.android.gms.internal.location.zzau;
-import com.google.android.gms.location.FusedLocationProviderClient;
-import com.google.android.gms.location.LocationCallback;
-import com.google.android.gms.location.LocationRequest;
-import com.google.android.gms.location.LocationResult;
-import com.google.android.gms.location.LocationServices;
-import com.google.android.gms.location.Priority;
-import com.google.android.gms.tasks.OnSuccessListener;
-
-import java.io.IOException;
-import java.util.List;
-import java.util.Locale;
-import java.util.concurrent.Executor;
-import java.util.concurrent.Executors;
-
 public class StartActivity extends AppCompatActivity {
     private AppRepository appRepository;
     private long currentSessionId;
@@ -84,21 +30,18 @@ public class StartActivity extends AppCompatActivity {
         setContentView(R.layout.start_activity);
         Button startButton = findViewById(R.id.start);
         appRepository = new AppRepository(getApplication());
-        // Inizializza il ViewModel
+        
         monitoringSessionViewModel = new ViewModelProvider(this).get(MonitoringSessionViewModel.class);
         potholeViewModel = new ViewModelProvider(this).get(PotholeViewModel.class);
         sensorManager = (SensorManager) getSystemService(Context.SENSOR_SERVICE);
         accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
         EnergySaver = findViewById(R.id.switch1);
 
-        // Inizializzare FusedLocationProviderClient
+     
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this);
         ImageButton mybutton = findViewById(R.id.question_tips);
         TooltipCompat.setTooltipText(mybutton, "OFF: WiFi + cella + GPS\n" +
                 "ON: Wi-Fi + cella (poco uso del GPS)" );
-
-
-        // Array dei permessi da richiedere
         String[] permissions = {
                 Manifest.permission.INTERNET,
                 Manifest.permission.ACCESS_FINE_LOCATION,
@@ -106,7 +49,6 @@ public class StartActivity extends AppCompatActivity {
                 // Aggiungi qui altri permessi se necessario, come quello per la memoria
         };
 
-        // Richiesta dei permessi
         ActivityCompat.requestPermissions(this, permissions, REQUEST_CODE);
         Executor executor = Executors.newSingleThreadExecutor();
         decideLocationRequest();
@@ -153,8 +95,7 @@ public class StartActivity extends AppCompatActivity {
                                 new String[]{Manifest.permission.ACCESS_FINE_LOCATION},
                                 REQUEST_CODE);
                     } else {
-                        // L'utente ha negato il permesso e ha selezionato "Non chiedere più"
-                        // Indirizza l'utente alle impostazioni del sistema
+                    
                         new AlertDialog.Builder(StartActivity.this)
                                 .setMessage("Questa app richiede il permesso di accesso alla posizione. Vai alle impostazioni per abilitarlo.")
                                 .setPositiveButton("Impostazioni", new DialogInterface.OnClickListener() {
@@ -169,14 +110,14 @@ public class StartActivity extends AppCompatActivity {
                                 .setNegativeButton("Annulla", null)
                                 .show();
                     }
-                    return;  // Interrompe l'esecuzione del codice successivo se il permesso non è stato concesso
+                    return;  
                 }
                 if (!isListening) {
-                    // Registrare il listener
+                   
                     sensorManager.registerListener(sensorEventListener, accelerometer, SensorManager.SENSOR_DELAY_NORMAL);
                     isListening = true;
                 } else {
-                    // Annullare la registrazione del listener
+                
                     sensorManager.unregisterListener(sensorEventListener);
                     isListening = false;
                 }
@@ -208,8 +149,6 @@ public class StartActivity extends AppCompatActivity {
                                             Toast.makeText(StartActivity.this, "Il nome della sessione già esiste", Toast.LENGTH_SHORT).show();
                                             return;
                                         }
-
-                                        // Avvia una nuova sessione di monitoraggio
                                         MonitoringSession newSession = new MonitoringSession(sessionName, MonitoringSession.getCurrentDateTime());
                                         monitoringSessionViewModel.insert(newSession, new AppRepository.InsertCallback() {
                                             @Override
@@ -221,7 +160,6 @@ public class StartActivity extends AppCompatActivity {
                                                         Toast.makeText(StartActivity.this, "Sessione avviata", Toast.LENGTH_LONG).show();
                                                     }
                                                 });
-                                                // Inizia ad osservare le coordinate
                                                 startLocation();
                                             }
                                         });
@@ -245,8 +183,6 @@ public class StartActivity extends AppCompatActivity {
 
         });
 
-
-        // Pulsante Stop
         Button stopButton = findViewById(R.id.end);
         stopButton.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -327,45 +263,23 @@ public class StartActivity extends AppCompatActivity {
             float mod_delta_y = Math.abs(deltacc_y);
             int orientation = getResources().getConfiguration().orientation;
             switch (orientation) {
-                //In landscape
+
                 case (2):
-                    ///*****ALGORITMO Z-TRASH*****///
                     if (x_acc_lin_curr > 11 || x_acc_lin_curr < -11) {
                         shouldAddPothole = true;
                         potholeCounter = 0;
                     } else {
                         potholeCounter++;
                     }
-                    ///*****ALGORITMO Z-DIFF*****///
-                    //    Log.d("variable2", "z-diff " + shouldAddPothole);
-                    //   if (mod_delta_x > differenza_limite) {
-                    //       Log.d("variable22", "z-diff " + shouldAddPothole);
-                    //       shouldAddPothole = true;
-                    //    }
+                   
                         break;
-
-                    //In portrait
                 case (1):
-                    ///*****ALGORITMO Z-TRASH*****///
                     if (y_acc_lin_curr > 11 || y_acc_lin_curr < -11) {
                         shouldAddPothole = true;
                         potholeCounter = 0;
                     } else {
                         potholeCounter++;
                     }
-
-
-                    ///*****ALGORITMO Z-DIFF*****///
-                    //   Log.d("Debug", "mod_delta_y pre-if: " + mod_delta_y);
-                    //   Log.d("Debug", "differenza_limite pre-if: " + differenza_limite);
-                    //   if (mod_delta_y > differenza_limite) {
-                        //       Log.d("Debug", "Entrato nell'if");
-                    //      shouldAddPothole = true;
-                    //  }
-                    //  Log.d("Debug", "mod_delta_y post-if: " + mod_delta_y);
-                    //   Log.d("Debug", "differenza_limite post-if: " + differenza_limite);
-                    //   Log.d("Debug", "valore post-if: " + shouldAddPothole);
-
                        break;
             }
             if (shouldAddPothole) {
@@ -437,9 +351,7 @@ public class StartActivity extends AppCompatActivity {
                 .build();
     }
     private void startLocation() {
-        // Codice per avviare il rilevamento delle coordinate
         if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-            // Richiedi i permessi mancanti
             ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION}, REQUEST_CODE);
             return;
         }
@@ -469,12 +381,10 @@ public class StartActivity extends AppCompatActivity {
     };
 
     public void onStopMonitoring(View view) {
-        // Ferma il monitoraggio dell'accelerometro
         stopAccelerometer();
         if (fusedLocationClient != null) {
             fusedLocationClient.removeLocationUpdates(locationCallback);
         }
-        // Osserva la sessione di monitoraggio
         monitoringSessionViewModel.getMonitoringSessionById((int) currentSessionId).observe(this, sessionToComplete -> {
             if (sessionToComplete != null) {
                 // Aggiorna i campi che vuoi, come ad esempio marcare la sessione come completata
