@@ -1,26 +1,38 @@
 package com.example.roomcoord;
 
+import static com.example.roomcoord.AppDatabase.databaseWriteExecutor;
+
 import android.Manifest;
 import android.app.AlertDialog;
 import android.content.Context;
 import android.content.DialogInterface;
+import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
+import android.location.Address;
+import android.location.Geocoder;
 import android.location.Location;
+import android.net.Uri;
 import android.os.Bundle;
 import android.os.Looper;
+import android.provider.Settings;
 import android.util.Log;
 import android.view.View;
 import android.widget.Button;
+import android.widget.CompoundButton;
 import android.widget.EditText;
+import android.widget.ImageButton;
+import android.widget.Switch;
 import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.appcompat.widget.SwitchCompat;
+import androidx.appcompat.widget.TooltipCompat;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 import androidx.lifecycle.ViewModelProvider;
@@ -34,6 +46,9 @@ import com.google.android.gms.location.LocationServices;
 import com.google.android.gms.location.Priority;
 import com.google.android.gms.tasks.OnSuccessListener;
 
+import java.io.IOException;
+import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 
@@ -55,9 +70,14 @@ public class StartActivity extends AppCompatActivity {
     float z_smoothed = 0;
     float starting_value = 0;
     boolean flag = false;
+    boolean isListening = false;
     float differenza_limite = 10F;
     boolean shouldAddPothole = false;
     private boolean canStartLocation = false;
+    private int potholeCounter = 0;
+    private static final int MAX_POTHOLES = 1;
+    private SwitchCompat EnergySaver;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -69,10 +89,15 @@ public class StartActivity extends AppCompatActivity {
         potholeViewModel = new ViewModelProvider(this).get(PotholeViewModel.class);
         sensorManager = (SensorManager) getSystemService(Context.SENSOR_SERVICE);
         accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
-
+        EnergySaver = findViewById(R.id.switch1);
 
         // Inizializzare FusedLocationProviderClient
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this);
+        ImageButton mybutton = findViewById(R.id.question_tips);
+        TooltipCompat.setTooltipText(mybutton, "OFF: WiFi + cella + GPS\n" +
+                "ON: Wi-Fi + cella (poco uso del GPS)" );
+
+
         // Array dei permessi da richiedere
         String[] permissions = {
                 Manifest.permission.INTERNET,
@@ -84,10 +109,77 @@ public class StartActivity extends AppCompatActivity {
         // Richiesta dei permessi
         ActivityCompat.requestPermissions(this, permissions, REQUEST_CODE);
         Executor executor = Executors.newSingleThreadExecutor();
+        decideLocationRequest();
+        EnergySaver.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
+            public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
+                if (isChecked) {
+                    // Mostra un dialog per confermare il risparmio energetico
+                    new AlertDialog.Builder(StartActivity.this)
+                            .setTitle("Risparmio energetico")
+                            .setMessage("Il risparmio energetico porterà una minore accuratezza, continuare? ")
+                            .setPositiveButton("Sì", new DialogInterface.OnClickListener() {
+                                public void onClick(DialogInterface dialog, int which) {
+                                    decideLocationRequest();  // Aggiunta di questa chiamata
+                                    // Abilita la modalità di risparmio energetico
+                                    restartLocationUpdates();
+                                }
+                            })
+                            .setNegativeButton("No", new DialogInterface.OnClickListener() {
+                                public void onClick(DialogInterface dialog, int which) {
+                                    // Reimposta lo stato dello switch a OFF
+                                    EnergySaver.setChecked(false);
+                                }
+                            })
+                            .show();
+                } else {
+                    decideLocationRequest();
+                    // Disabilita la modalità di risparmio energetico
+                    restartLocationUpdates();
+                }
+            }
+        });
+
 
         startButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
+                if (ContextCompat.checkSelfPermission(StartActivity.this, Manifest.permission.ACCESS_FINE_LOCATION)
+                        != PackageManager.PERMISSION_GRANTED) {
+                    // Permesso non concesso
+                    if (ActivityCompat.shouldShowRequestPermissionRationale(StartActivity.this,
+                            Manifest.permission.ACCESS_FINE_LOCATION)) {
+                        // Mostra una spiegazione all'utente, poi richiedi il permesso
+                        ActivityCompat.requestPermissions(StartActivity.this,
+                                new String[]{Manifest.permission.ACCESS_FINE_LOCATION},
+                                REQUEST_CODE);
+                    } else {
+                        // L'utente ha negato il permesso e ha selezionato "Non chiedere più"
+                        // Indirizza l'utente alle impostazioni del sistema
+                        new AlertDialog.Builder(StartActivity.this)
+                                .setMessage("Questa app richiede il permesso di accesso alla posizione. Vai alle impostazioni per abilitarlo.")
+                                .setPositiveButton("Impostazioni", new DialogInterface.OnClickListener() {
+                                    @Override
+                                    public void onClick(DialogInterface dialog, int which) {
+                                        Intent intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
+                                        Uri uri = Uri.fromParts("package", getPackageName(), null);
+                                        intent.setData(uri);
+                                        startActivity(intent);
+                                    }
+                                })
+                                .setNegativeButton("Annulla", null)
+                                .show();
+                    }
+                    return;  // Interrompe l'esecuzione del codice successivo se il permesso non è stato concesso
+                }
+                if (!isListening) {
+                    // Registrare il listener
+                    sensorManager.registerListener(sensorEventListener, accelerometer, SensorManager.SENSOR_DELAY_NORMAL);
+                    isListening = true;
+                } else {
+                    // Annullare la registrazione del listener
+                    sensorManager.unregisterListener(sensorEventListener);
+                    isListening = false;
+                }
                 AlertDialog.Builder builder = new AlertDialog.Builder(StartActivity.this);
                 builder.setTitle("Inserisci un nome per la sessione");
 
@@ -130,7 +222,7 @@ public class StartActivity extends AppCompatActivity {
                                                     }
                                                 });
                                                 // Inizia ad osservare le coordinate
-                                                //startLocation();
+                                                startLocation();
                                             }
                                         });
                                     }
@@ -148,7 +240,9 @@ public class StartActivity extends AppCompatActivity {
                 });
 
                 builder.show();
-            }
+                }
+
+
         });
 
 
@@ -183,6 +277,37 @@ public class StartActivity extends AppCompatActivity {
             }
         };
     }
+    private void decideLocationRequest() {
+        if (EnergySaver.isChecked()) {
+            Log.d("LocationRequest", "Creating low power location request");
+            createLowPowerLocationRequest();
+        } else {
+            Log.d("LocationRequest", "Creating high accuracy location request");
+            createHighAccuracyLocationRequest();
+        }
+    }
+    private void restartLocationUpdates() {
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED &&
+                ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+
+            fusedLocationClient.removeLocationUpdates(locationCallback); // Rimuovi gli aggiornamenti precedenti
+            fusedLocationClient.requestLocationUpdates(locationRequest, locationCallback, Looper.getMainLooper()); // Avvia nuovi aggiornamenti
+        }
+    }
+
+    private void createHighAccuracyLocationRequest() {
+        locationRequest = new LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 2000)
+                .build();
+        // Ricomincia il rilevamento della posizione con le nuove impostazioni
+        restartLocationUpdates();
+    }
+
+    private void createLowPowerLocationRequest() {
+        locationRequest = new LocationRequest.Builder(Priority.PRIORITY_LOW_POWER, 5000)
+                .build();
+        // Ricomincia il rilevamento della posizione con le nuove impostazioni
+        restartLocationUpdates();
+    }
     private void mostraValoriacc_lin(SensorEvent sensorEvent) {
         if (sensorEvent != null) {
             getSmoothing(sensorEvent, sensorEvent.values[0], sensorEvent.values[1], sensorEvent.values[2]);
@@ -200,39 +325,48 @@ public class StartActivity extends AppCompatActivity {
             //Rendo positivo il valore trovato e così facendo posso sfruttarlo all'interno dell'algoritmo Z-Diff.
             float mod_delta_x = Math.abs(deltacc_x);
             float mod_delta_y = Math.abs(deltacc_y);
-            Log.d("deltax", String.valueOf(deltacc_x));
-            Log.d("deltay", String.valueOf(deltacc_y));
             int orientation = getResources().getConfiguration().orientation;
             switch (orientation) {
                 //In landscape
                 case (2):
                     ///*****ALGORITMO Z-TRASH*****///
-                    if (x_acc_lin_curr > 8 || x_acc_lin_curr < -8) {
-                        Log.d("variable", String.valueOf(shouldAddPothole));
+                    if (x_acc_lin_curr > 11 || x_acc_lin_curr < -11) {
                         shouldAddPothole = true;
-
+                        potholeCounter = 0;
+                    } else {
+                        potholeCounter++;
                     }
                     ///*****ALGORITMO Z-DIFF*****///
-                    if (mod_delta_x > differenza_limite) {
-                        Log.d("variable", "z-diff" + shouldAddPothole);
-                        shouldAddPothole = true;
-                    }
-                    break;
+                    //    Log.d("variable2", "z-diff " + shouldAddPothole);
+                    //   if (mod_delta_x > differenza_limite) {
+                    //       Log.d("variable22", "z-diff " + shouldAddPothole);
+                    //       shouldAddPothole = true;
+                    //    }
+                        break;
 
                     //In portrait
                 case (1):
                     ///*****ALGORITMO Z-TRASH*****///
-                    if (y_acc_lin_curr > 8 || y_acc_lin_curr < -8) {
-                        Log.d("variable", "z-diff" + shouldAddPothole);
+                    if (y_acc_lin_curr > 11 || y_acc_lin_curr < -11) {
                         shouldAddPothole = true;
+                        potholeCounter = 0;
+                    } else {
+                        potholeCounter++;
                     }
 
+
                     ///*****ALGORITMO Z-DIFF*****///
-                    if (mod_delta_y > differenza_limite) {
-                        Log.d("variable", "z-diff" + shouldAddPothole);
-                        shouldAddPothole = true;
-                    }
-                    break;
+                    //   Log.d("Debug", "mod_delta_y pre-if: " + mod_delta_y);
+                    //   Log.d("Debug", "differenza_limite pre-if: " + differenza_limite);
+                    //   if (mod_delta_y > differenza_limite) {
+                        //       Log.d("Debug", "Entrato nell'if");
+                    //      shouldAddPothole = true;
+                    //  }
+                    //  Log.d("Debug", "mod_delta_y post-if: " + mod_delta_y);
+                    //   Log.d("Debug", "differenza_limite post-if: " + differenza_limite);
+                    //   Log.d("Debug", "valore post-if: " + shouldAddPothole);
+
+                       break;
             }
             if (shouldAddPothole) {
                 addPothole();
@@ -252,13 +386,37 @@ public class StartActivity extends AppCompatActivity {
     }
 
     private void addPothole() {
-        if (shouldAddPothole && currentLocation != null) {
-            Pothole newPothole = new Pothole((int) currentSessionId, currentLocation.getLatitude(), currentLocation.getLongitude(), "Indirizzo");
-            // Assumendo che tu abbia un ViewModel o un altro metodo per inserire nel DB
-            potholeViewModel.insert(newPothole);
-            shouldAddPothole = false;
+        if (shouldAddPothole && currentLocation != null && potholeCounter >= MAX_POTHOLES) {
+            databaseWriteExecutor.execute(() -> {
+                String addressString;
+                if(Geocoder.isPresent()) {
+                    Geocoder geocoder = new Geocoder(this, Locale.getDefault());
+                    List<Address> addresses;
+                    try {
+                        addresses = geocoder.getFromLocation(currentLocation.getLatitude(), currentLocation.getLongitude(), 1);
+                        if (addresses != null && addresses.size() > 0) {
+                            Address address = addresses.get(0);
+                            addressString = address.getAddressLine(0);
+                        } else {
+                            addressString = "Indirizzo sconosciuto";
+                        }
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                        addressString = "Errore nella geocodifica";
+                    }
+                } else {
+                    addressString = "Geocodifica assente. Impossibile trovare l'indirizzo";
+                }
+
+                Pothole newPothole = new Pothole((int) currentSessionId, currentLocation.getLatitude(), currentLocation.getLongitude(), addressString);
+                potholeViewModel.insert(newPothole);
+                shouldAddPothole = false;
+                potholeCounter = 0;
+            });
         }
     }
+
+
     @Override
     protected void onResume() {
         super.onResume();
@@ -275,7 +433,7 @@ public class StartActivity extends AppCompatActivity {
 
     private void createLocationRequest() {
 
-        locationRequest = new LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 50)
+        locationRequest = new LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 250)
                 .build();
     }
     private void startLocation() {
@@ -285,34 +443,14 @@ public class StartActivity extends AppCompatActivity {
             ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION}, REQUEST_CODE);
             return;
         }
-        createLocationRequest();
+        decideLocationRequest();
         fusedLocationClient.requestLocationUpdates(locationRequest, locationCallback, Looper.getMainLooper());
 
     }
 
 
-    @Override
-    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-        if (requestCode == REQUEST_CODE) {
-            boolean allPermissionsGranted = true;
-            for (int grantResult : grantResults) {
-                if (grantResult != PackageManager.PERMISSION_GRANTED) {
-                    allPermissionsGranted = false;
-                    break;
-                }
-            }
 
-            if (allPermissionsGranted) {
-                // Tutti i permessi sono stati concessi
-               // startLocation();
-            } else {
-                // Almeno un permesso è stato negato
-                Toast.makeText(this, "Permessi negati. Alcune funzionalità potrebbero non essere disponibili.", Toast.LENGTH_LONG).show();
-            }
-        }
-    }
-    private LocationCallback locationCallback = new LocationCallback() {
+    private final LocationCallback locationCallback = new LocationCallback() {
         @Override
         public void onLocationResult(LocationResult locationResult) {
             if (locationResult == null) {
