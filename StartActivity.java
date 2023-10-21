@@ -46,7 +46,7 @@ public class StartActivity extends AppCompatActivity {
                 Manifest.permission.INTERNET,
                 Manifest.permission.ACCESS_FINE_LOCATION,
                 Manifest.permission.ACCESS_COARSE_LOCATION
-                // Aggiungi qui altri permessi se necessario, come quello per la memoria
+          
         };
 
         ActivityCompat.requestPermissions(this, permissions, REQUEST_CODE);
@@ -55,27 +55,25 @@ public class StartActivity extends AppCompatActivity {
         EnergySaver.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
             public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
                 if (isChecked) {
-                    // Mostra un dialog per confermare il risparmio energetico
+
                     new AlertDialog.Builder(StartActivity.this)
                             .setTitle("Risparmio energetico")
                             .setMessage("Il risparmio energetico porterà una minore accuratezza, continuare? ")
                             .setPositiveButton("Sì", new DialogInterface.OnClickListener() {
                                 public void onClick(DialogInterface dialog, int which) {
-                                    decideLocationRequest();  // Aggiunta di questa chiamata
-                                    // Abilita la modalità di risparmio energetico
+                                    decideLocationRequest(); 
                                     restartLocationUpdates();
                                 }
                             })
                             .setNegativeButton("No", new DialogInterface.OnClickListener() {
                                 public void onClick(DialogInterface dialog, int which) {
-                                    // Reimposta lo stato dello switch a OFF
+  
                                     EnergySaver.setChecked(false);
                                 }
                             })
                             .show();
                 } else {
                     decideLocationRequest();
-                    // Disabilita la modalità di risparmio energetico
                     restartLocationUpdates();
                 }
             }
@@ -373,7 +371,6 @@ public class StartActivity extends AppCompatActivity {
                     double latitude = location.getLatitude();
                     double longitude = location.getLongitude();
                     Log.d("Location", "Latitudine: " + latitude + ", Longitudine: " + longitude);
-                    // Fai quello che devi fare con le coordinate qui
                     currentLocation=location;
                 }
             }
@@ -387,11 +384,10 @@ public class StartActivity extends AppCompatActivity {
         }
         monitoringSessionViewModel.getMonitoringSessionById((int) currentSessionId).observe(this, sessionToComplete -> {
             if (sessionToComplete != null) {
-                // Aggiorna i campi che vuoi, come ad esempio marcare la sessione come completata
-                sessionToComplete.setSessionDateTime(MonitoringSession.getCurrentDateTime());  // Aggiorna il timestamp, se necessario
+
+                sessionToComplete.setSessionDateTime(MonitoringSession.getCurrentDateTime()); 
                 sessionToComplete.setCompleted(true);
                 appRepository.updateMonitoringSession(sessionToComplete);
-                // Torna alla schermata principale (o fa qualcos'altro)
                 finish();
             }
         });
